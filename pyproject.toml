@@ -1,0 +1,16 @@
+[project]
+name = "home-assistant-pool-assistant"
+version = "0.1.0"
+description = "Home Assistant custom integration for pool water chemistry assistance"
+requires-python = ">=3.12"
+dependencies = []
+
+[project.optional-dependencies]
+test = [
+  "homeassistant>=2024.6.0",
+  "pytest",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]

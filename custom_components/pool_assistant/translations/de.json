@@ -1,0 +1,44 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Pool Assistant",
+        "description": "Quell-Entitäten für das Chlor/Cyanursäure-Gleichgewichtsmodell auswählen.",
+        "data": {
+          "name": "Name",
+          "pool_volume_m3": "Poolvolumen in m³",
+          "ph_entity": "pH-Sensor",
+          "free_chlorine_entity": "Sensor für freies Chlor",
+          "total_chlorine_entity": "Sensor für Gesamtchlor",
+          "cya_entity": "Sensor für Cyanursäure",
+          "alkalinity_entity": "Sensor für Alkalinität",
+          "temperature_entity": "Temperatursensor"
+        },
+        "data_description": {
+          "temperature_entity": "Optional. Wenn kein Sensor angegeben ist, wird 25 °C genutzt."
+        }
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Pool Assistant Optionen",
+        "description": "Quell-Entitäten und Poolparameter aktualisieren.",
+        "data": {
+          "name": "Name",
+          "pool_volume_m3": "Poolvolumen in m³",
+          "ph_entity": "pH-Sensor",
+          "free_chlorine_entity": "Sensor für freies Chlor",
+          "total_chlorine_entity": "Sensor für Gesamtchlor",
+          "cya_entity": "Sensor für Cyanursäure",
+          "alkalinity_entity": "Sensor für Alkalinität",
+          "temperature_entity": "Temperatursensor"
+        },
+        "data_description": {
+          "temperature_entity": "Optional. Wenn kein Sensor angegeben ist, wird 25 °C genutzt."
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,44 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Pool Assistant",
+        "description": "Select the source entities used for the chlorine/cyanuric acid equilibrium model.",
+        "data": {
+          "name": "Name",
+          "pool_volume_m3": "Pool volume in m³",
+          "ph_entity": "pH sensor",
+          "free_chlorine_entity": "Free chlorine sensor",
+          "total_chlorine_entity": "Total chlorine sensor",
+          "cya_entity": "Cyanuric acid sensor",
+          "alkalinity_entity": "Alkalinity sensor",
+          "temperature_entity": "Temperature sensor"
+        },
+        "data_description": {
+          "temperature_entity": "Optional. If no sensor is selected, 25 °C is used."
+        }
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Pool Assistant options",
+        "description": "Update source entities and pool parameters.",
+        "data": {
+          "name": "Name",
+          "pool_volume_m3": "Pool volume in m³",
+          "ph_entity": "pH sensor",
+          "free_chlorine_entity": "Free chlorine sensor",
+          "total_chlorine_entity": "Total chlorine sensor",
+          "cya_entity": "Cyanuric acid sensor",
+          "alkalinity_entity": "Alkalinity sensor",
+          "temperature_entity": "Temperature sensor"
+        },
+        "data_description": {
+          "temperature_entity": "Optional. If no sensor is selected, 25 °C is used."
+        }
+      }
+    }
+  }
+}
