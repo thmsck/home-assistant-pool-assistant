@@ -411,9 +411,11 @@ def _measured_at(hass: HomeAssistant, entity_id: str) -> datetime | None:
     try:
         parsed = dt_util.parse_datetime(value)
     except (TypeError, ValueError, TemplateError):
-        return None
+        return state.last_updated
     if parsed is None:
-        return None
+        return state.last_updated
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=dt_util.DEFAULT_TIME_ZONE)
     return dt_util.as_utc(parsed)
 
 
