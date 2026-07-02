@@ -1,0 +1,103 @@
+from __future__ import annotations
+
+import importlib.util
+from pathlib import Path
+import sys
+
+
+ASSESSMENT_PATH = (
+    Path(__file__).parents[1]
+    / "custom_components"
+    / "pool_assistant"
+    / "assessment.py"
+)
+SPEC = importlib.util.spec_from_file_location("pool_assistant_assessment", ASSESSMENT_PATH)
+assessment = importlib.util.module_from_spec(SPEC)
+assert SPEC.loader is not None
+sys.modules[SPEC.name] = assessment
+SPEC.loader.exec_module(assessment)
+
+assess_pool_water = assessment.assess_pool_water
+
+
+def test_good_water_scores_high() -> None:
+    result = assess_pool_water(
+        ph=7.3,
+        hocl_mg_l=0.07,
+        cya_mg_l=35,
+        alkalinity_mg_l=90,
+        bound_chlorine_mg_l=0.1,
+        chlorine_plausible=True,
+        measurement_status="current",
+    )
+
+    assert result.algae_risk == "low"
+    assert result.chemistry_index == 100
+    assert result.load_status == "normal"
+    assert result.pool_status == "Perfekt"
+
+
+def test_unsynced_measurements_dominate_pool_status() -> None:
+    result = assess_pool_water(
+        ph=7.3,
+        hocl_mg_l=0.07,
+        cya_mg_l=35,
+        alkalinity_mg_l=90,
+        bound_chlorine_mg_l=0.1,
+        chlorine_plausible=True,
+        measurement_status="unsynced",
+    )
+
+    assert result.algae_risk == "high"
+    assert result.pool_status == "Messwerte nicht synchron"
+    assert result.measurement_score == 60
+
+
+def test_implausible_chlorine_measurement_is_critical_risk() -> None:
+    result = assess_pool_water(
+        ph=7.31,
+        hocl_mg_l=0.0253,
+        cya_mg_l=140,
+        alkalinity_mg_l=82,
+        bound_chlorine_mg_l=0,
+        chlorine_plausible=False,
+        measurement_status="unsynced",
+    )
+
+    assert result.algae_risk == "critical"
+    assert result.pool_status == "Messwerte nicht synchron"
+    assert result.load_status == "check_measurement"
+    assert result.bound_chlorine_score == 40
+
+
+def test_limited_disinfection_is_medium_risk_when_measurements_are_current() -> None:
+    result = assess_pool_water(
+        ph=7.3,
+        hocl_mg_l=0.03,
+        cya_mg_l=40,
+        alkalinity_mg_l=90,
+        bound_chlorine_mg_l=0.1,
+        chlorine_plausible=True,
+        measurement_status="current",
+    )
+
+    assert result.algae_risk == "medium"
+    assert result.pool_status == "Beobachten"
+    assert result.disinfection_score == 70
+
+
+def test_high_bound_chlorine_does_not_raise_algae_risk() -> None:
+    result = assess_pool_water(
+        ph=7.3,
+        hocl_mg_l=0.07,
+        cya_mg_l=35,
+        alkalinity_mg_l=90,
+        bound_chlorine_mg_l=0.8,
+        chlorine_plausible=True,
+        measurement_status="current",
+    )
+
+    assert result.algae_risk == "low"
+    assert result.load_status == "high"
+    assert result.bound_chlorine_score == 20
+    assert result.pool_status == "Handlungsbedarf"

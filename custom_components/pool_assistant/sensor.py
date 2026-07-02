@@ -18,6 +18,7 @@ from homeassistant.helpers.template import TemplateError
 from homeassistant.helpers.typing import StateType
 from homeassistant.util import dt as dt_util
 
+from .assessment import PoolAssessment, assess_pool_water
 from .chemistry import PoolChemistryResult, calculate_pool_chemistry
 from .const import (
     ATTR_MODEL,
@@ -40,23 +41,11 @@ from .const import (
     DEFAULT_TEMPERATURE_C,
     DOMAIN,
 )
+from .measurement import MeasurementStatus, calculate_measurement_status
 
 UNIT_MG_L = "mg/l"
 HOCL_RED_THRESHOLD_MG_L = 0.016
 HOCL_GREEN_THRESHOLD_MG_L = 0.05
-SECONDS_PER_DAY = 86400
-
-
-@dataclass(frozen=True)
-class MeasurementStatus:
-    """Source measurement age and synchronization status."""
-
-    state: str
-    label: str
-    newest_age_days: float
-    oldest_age_days: float
-    chlorine_pair_age_delta_hours: float | None
-    chemistry_age_delta_hours: float
 
 
 @dataclass(frozen=True)
@@ -68,6 +57,7 @@ class PoolAssistantResult:
     bound_chlorine_raw_delta_mg_l: float | None
     chlorine_plausible: bool | None
     measurement_status: MeasurementStatus | None
+    assessment: PoolAssessment
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -170,6 +160,40 @@ SENSORS: tuple[PoolAssistantSensorDescription, ...] = (
             else "unknown"
         ),
         attributes_fn=lambda result: _measurement_status_attributes(result),
+    ),
+    PoolAssistantSensorDescription(
+        key="load_status",
+        name="Belastungsstatus",
+        icon="mdi:flask-alert",
+        value_fn=lambda result: result.assessment.load_status,
+        attributes_fn=lambda result: _load_status_attributes(result),
+    ),
+    PoolAssistantSensorDescription(
+        key="algae_risk",
+        name="Algenrisiko",
+        icon="mdi:biohazard",
+        value_fn=lambda result: result.assessment.algae_risk,
+        attributes_fn=lambda result: _assessment_attributes(result.assessment),
+    ),
+    PoolAssistantSensorDescription(
+        key="chemistry_index",
+        name="Poolchemie-Index",
+        native_unit_of_measurement=PERCENTAGE,
+        state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=0,
+        icon="mdi:heart-pulse",
+        value_fn=lambda result: result.assessment.chemistry_index,
+        attributes_fn=lambda result: _assessment_attributes(result.assessment),
+    ),
+    PoolAssistantSensorDescription(
+        key="pool_status",
+        name="Poolstatus",
+        icon="mdi:pool",
+        value_fn=lambda result: result.assessment.pool_status,
+        attributes_fn=lambda result: {
+            "summary": result.assessment.summary,
+            **_assessment_attributes(result.assessment),
+        },
     ),
 )
 
@@ -317,13 +341,31 @@ class PoolAssistantSensor(SensorEntity):
                 raw_delta = total_chlorine - free_chlorine
                 bound_chlorine = max(raw_delta, 0.0)
                 chlorine_plausible = total_chlorine + 0.05 >= free_chlorine
+            alkalinity = None
+            alkalinity_entity = config.get(CONF_ALKALINITY_ENTITY)
+            if alkalinity_entity:
+                alkalinity = _state_float(self.hass, alkalinity_entity)
+            measurement_status = _measurement_status(self.hass, config)
 
             return PoolAssistantResult(
                 chemistry=chemistry,
                 bound_chlorine_mg_l=bound_chlorine,
                 bound_chlorine_raw_delta_mg_l=raw_delta,
                 chlorine_plausible=chlorine_plausible,
-                measurement_status=_measurement_status(self.hass, config),
+                measurement_status=measurement_status,
+                assessment=assess_pool_water(
+                    ph=ph,
+                    hocl_mg_l=chemistry.hocl_mg_l,
+                    cya_mg_l=cya,
+                    alkalinity_mg_l=alkalinity,
+                    bound_chlorine_mg_l=bound_chlorine,
+                    chlorine_plausible=chlorine_plausible,
+                    measurement_status=(
+                        measurement_status.state
+                        if measurement_status is not None
+                        else None
+                    ),
+                ),
             )
         except (TypeError, ValueError):
             return None
@@ -357,47 +399,18 @@ def _measurement_status(
     if any(value is None for value in measured_at):
         return None
 
-    now = dt_util.utcnow()
-    timestamps = [value.timestamp() for value in measured_at if value is not None]
-    newest = max(timestamps)
-    oldest = min(timestamps)
-    newest_age_days = (now.timestamp() - newest) / SECONDS_PER_DAY
-    oldest_age_days = (now.timestamp() - oldest) / SECONDS_PER_DAY
-    chemistry_age_delta_hours = (newest - oldest) / 3600
-
-    chlorine_pair_delta_hours = None
+    free_at = None
+    total_at = None
     total_chlorine_entity = config.get(CONF_TOTAL_CHLORINE_ENTITY)
     if total_chlorine_entity:
         free_at = _measured_at(hass, config[CONF_FREE_CHLORINE_ENTITY])
         total_at = _measured_at(hass, total_chlorine_entity)
-        if free_at is not None and total_at is not None:
-            chlorine_pair_delta_hours = (
-                abs(free_at.timestamp() - total_at.timestamp()) / 3600
-            )
 
-    if newest_age_days > 7 or oldest_age_days > 30:
-        state = "stale"
-        label = "Veraltet"
-    elif (
-        chemistry_age_delta_hours > 48
-        or (
-            chlorine_pair_delta_hours is not None
-            and chlorine_pair_delta_hours > 12
-        )
-    ):
-        state = "unsynced"
-        label = "Nicht synchron"
-    else:
-        state = "current"
-        label = "Aktuell"
-
-    return MeasurementStatus(
-        state=state,
-        label=label,
-        newest_age_days=newest_age_days,
-        oldest_age_days=oldest_age_days,
-        chlorine_pair_age_delta_hours=chlorine_pair_delta_hours,
-        chemistry_age_delta_hours=chemistry_age_delta_hours,
+    return calculate_measurement_status(
+        measured_at=[value for value in measured_at if value is not None],
+        now=dt_util.utcnow(),
+        free_chlorine_measured_at=free_at,
+        total_chlorine_measured_at=total_at,
     )
 
 
@@ -408,12 +421,14 @@ def _measured_at(hass: HomeAssistant, entity_id: str) -> datetime | None:
     value = state.attributes.get("measured_at")
     if value is None:
         return state.last_updated
+    if isinstance(value, datetime):
+        return dt_util.as_utc(value)
     try:
         parsed = dt_util.parse_datetime(value)
     except (TypeError, ValueError, TemplateError):
-        return state.last_updated
+        return None
     if parsed is None:
-        return state.last_updated
+        return None
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=dt_util.DEFAULT_TIME_ZONE)
     return dt_util.as_utc(parsed)
@@ -448,6 +463,37 @@ def _measurement_status_attributes(result: PoolAssistantResult) -> dict[str, Any
     if result.measurement_status is None:
         return {"label": "Unbekannt"}
     return {"label": result.measurement_status.label}
+
+
+def _load_status_attributes(result: PoolAssistantResult) -> dict[str, Any]:
+    labels = {
+        "normal": "Unauffällig",
+        "slightly_elevated": "Leicht erhöht",
+        "elevated": "Erhöht",
+        "high": "Hoch",
+        "check_measurement": "Messwerte prüfen",
+        "unknown": "Unbekannt",
+    }
+    attributes = _bound_chlorine_attributes(result)
+    attributes["label"] = labels.get(result.assessment.load_status, "Unbekannt")
+    if result.assessment.bound_chlorine_score is not None:
+        attributes["bound_chlorine_score"] = result.assessment.bound_chlorine_score
+    return attributes
+
+
+def _assessment_attributes(assessment: PoolAssessment) -> dict[str, Any]:
+    attributes: dict[str, Any] = {
+        "ph_score": assessment.ph_score,
+        "disinfection_score": assessment.disinfection_score,
+        "cya_score": assessment.cya_score,
+        "measurement_score": assessment.measurement_score,
+        "load_status": assessment.load_status,
+    }
+    if assessment.alkalinity_score is not None:
+        attributes["alkalinity_score"] = assessment.alkalinity_score
+    if assessment.bound_chlorine_score is not None:
+        attributes["bound_chlorine_score"] = assessment.bound_chlorine_score
+    return attributes
 
 
 def _disinfection_status(hocl_mg_l: float) -> str:

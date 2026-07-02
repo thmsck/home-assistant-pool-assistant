@@ -22,6 +22,9 @@ acid equilibrium model documented by the USEPA simulator:
 The cyanuric-acid equilibrium constants are the O'Brien/USEPA constants for
 25 °C. The HOCl/OCl pKa is temperature-adjusted.
 
+See `docs/pool-water-chemistry.md` for the chemistry background, working
+thresholds and assessment rationale.
+
 ## Sensors
 
 The integration creates these sensors:
@@ -35,6 +38,10 @@ The integration creates these sensors:
 - `Desinfektionsstatus`
 - `Messalter`
 - `Messstatus`
+- `Belastungsstatus`
+- `Algenrisiko`
+- `Poolchemie-Index`
+- `Poolstatus`
 
 ## Configuration
 
