@@ -195,6 +195,13 @@ SENSORS: tuple[PoolAssistantSensorDescription, ...] = (
             **_assessment_attributes(result.assessment),
         },
     ),
+    PoolAssistantSensorDescription(
+        key="recommendation",
+        name="Handlungsempfehlung",
+        icon="mdi:clipboard-check-outline",
+        value_fn=lambda result: result.assessment.recommendation_state,
+        attributes_fn=lambda result: _recommendation_attributes(result.assessment),
+    ),
 )
 
 
@@ -494,6 +501,14 @@ def _assessment_attributes(assessment: PoolAssessment) -> dict[str, Any]:
     if assessment.bound_chlorine_score is not None:
         attributes["bound_chlorine_score"] = assessment.bound_chlorine_score
     return attributes
+
+
+def _recommendation_attributes(assessment: PoolAssessment) -> dict[str, Any]:
+    return {
+        "summary": assessment.recommendation_summary,
+        "recommendations": list(assessment.recommendations),
+        **_assessment_attributes(assessment),
+    }
 
 
 def _disinfection_status(hocl_mg_l: float) -> str:

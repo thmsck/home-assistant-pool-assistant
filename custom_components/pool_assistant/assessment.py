@@ -14,6 +14,9 @@ class PoolAssessment:
     pool_status: str
     summary: str
     load_status: str
+    recommendation_state: str
+    recommendation_summary: str
+    recommendations: tuple[str, ...]
     ph_score: int
     disinfection_score: int
     cya_score: int
@@ -83,6 +86,18 @@ def assess_pool_water(
         cya_mg_l=cya_mg_l,
         ph=ph,
     )
+    recommendation_state, recommendation_summary, recommendations = _recommendation(
+        ph=ph,
+        hocl_mg_l=hocl_mg_l,
+        cya_mg_l=cya_mg_l,
+        alkalinity_mg_l=alkalinity_mg_l,
+        bound_chlorine_mg_l=bound_chlorine_mg_l,
+        chlorine_plausible=chlorine_plausible,
+        measurement_status=measurement_status,
+        disinfection_state=disinfection_state,
+        algae_risk=algae_risk,
+        load_status=load_status,
+    )
 
     return PoolAssessment(
         algae_risk=algae_risk,
@@ -90,6 +105,9 @@ def assess_pool_water(
         pool_status=pool_status,
         summary=summary,
         load_status=load_status,
+        recommendation_state=recommendation_state,
+        recommendation_summary=recommendation_summary,
+        recommendations=recommendations,
         ph_score=ph_score,
         disinfection_score=disinfection_score,
         cya_score=cya_score,
@@ -261,3 +279,122 @@ def _pool_status(
     if chemistry_index < 95:
         return "Gut", "Wasserwerte liegen im nutzbaren Zielbereich."
     return "Perfekt", "Wasserchemie ist im Zielbereich."
+
+
+def _recommendation(
+    *,
+    ph: float,
+    hocl_mg_l: float,
+    cya_mg_l: float,
+    alkalinity_mg_l: float | None,
+    bound_chlorine_mg_l: float | None,
+    chlorine_plausible: bool | None,
+    measurement_status: str | None,
+    disinfection_state: str,
+    algae_risk: str,
+    load_status: str,
+) -> tuple[str, str, tuple[str, ...]]:
+    if measurement_status == "stale":
+        return (
+            "Messen",
+            "Messwerte sind veraltet.",
+            (
+                "Vollständige PoolLab-Messreihe durchführen.",
+                "Vor Dosierentscheidungen pH, freies Chlor, Gesamtchlor, CYA und Alkalinität aktualisieren.",
+            ),
+        )
+    if measurement_status == "unsynced":
+        return (
+            "Messen",
+            "Messwerte stammen nicht aus derselben Messreihe.",
+            (
+                "Relevante PoolLab-Werte in einer zusammenhängenden Messreihe neu messen.",
+                "Vor Dosierentscheidungen keine gemischten Alt- und Neumessungen verwenden.",
+            ),
+        )
+    if chlorine_plausible is False:
+        return (
+            "Messen",
+            "Freies Chlor und Gesamtchlor sind unplausibel.",
+            (
+                "Freies Chlor und Gesamtchlor direkt nacheinander erneut messen.",
+                "Küvetten, Tabletten/Reagenzien und Messablauf prüfen.",
+            ),
+        )
+
+    priority = 0
+    actions: list[str] = []
+
+    if disinfection_state == "critical":
+        priority = max(priority, 3)
+        actions.append("Aktives Chlor ist zu niedrig; Desinfektionsleistung zeitnah erhöhen.")
+    elif disinfection_state == "limited":
+        priority = max(priority, 1)
+        actions.append("Aktives Chlor liegt im gelben Bereich; bei Sonne, Badebetrieb oder Trübung freies Chlor erhöhen.")
+
+    if algae_risk == "critical":
+        priority = max(priority, 3)
+        actions.append("Chemisches Algenrisiko ist kritisch; Ursache vor Nutzung prüfen.")
+    elif algae_risk == "high":
+        priority = max(priority, 2)
+        actions.append("Chemisches Algenrisiko ist erhöht; HOCl, pH und CYA gezielt korrigieren.")
+    elif algae_risk == "medium":
+        priority = max(priority, 1)
+        actions.append("Chemisches Algenrisiko beobachten; Entwicklung nach Umwälzung oder Nachdosierung erneut prüfen.")
+
+    if load_status == "high":
+        priority = max(priority, 2)
+        actions.append("Gebundenes Chlor ist hoch; oxidieren/schocken und Filterbetrieb prüfen.")
+    elif load_status == "elevated":
+        priority = max(priority, 1)
+        actions.append("Gebundenes Chlor ist erhöht; Filter laufen lassen und freies/Gesamtchlor erneut messen.")
+    elif load_status == "slightly_elevated":
+        priority = max(priority, 1)
+        actions.append("Gebundenes Chlor ist leicht erhöht; weiter beobachten.")
+
+    if ph > 7.8:
+        priority = max(priority, 2)
+        actions.append("pH ist deutlich erhöht; pH senken, da die Chlorwirkung reduziert ist.")
+    elif ph > 7.6:
+        priority = max(priority, 1)
+        actions.append("pH ist erhöht; pH-Senkung prüfen.")
+    elif ph < 7.0:
+        priority = max(priority, 2)
+        actions.append("pH ist niedrig; pH anheben und Messung bestätigen.")
+
+    if cya_mg_l > 90:
+        priority = max(priority, 2)
+        actions.append("CYA ist sehr hoch; kein organisches Chlor verwenden und Verdünnung/Wasserwechsel planen.")
+    elif cya_mg_l > 70:
+        priority = max(priority, 1)
+        actions.append("CYA ist erhöht; organisches Chlor vermeiden und Entwicklung beobachten.")
+
+    if alkalinity_mg_l is not None:
+        if alkalinity_mg_l < 50:
+            priority = max(priority, 2)
+            actions.append("Alkalinität ist niedrig; pH-Stabilität prüfen und TA-Anhebung planen.")
+        elif alkalinity_mg_l < 70:
+            priority = max(priority, 1)
+            actions.append("Alkalinität ist leicht niedrig; pH-Schwankungen beobachten.")
+        elif alkalinity_mg_l > 150:
+            priority = max(priority, 1)
+            actions.append("Alkalinität ist hoch; pH-Korrekturen können träge reagieren.")
+
+    if not actions:
+        return (
+            "Keine Maßnahme",
+            "Wasserchemie liegt im Zielbereich.",
+            ("Regulären Messrhythmus beibehalten.",),
+        )
+
+    if priority >= 3:
+        state = "Kritisch"
+        summary = "Zeitnah korrigieren."
+    elif priority == 2:
+        state = "Korrigieren"
+        summary = "Korrektur ist sinnvoll."
+    else:
+        state = "Beobachten"
+        summary = "Werte beobachten und bei Bedarf nachmessen."
+
+    return state, summary, tuple(dict.fromkeys(actions))

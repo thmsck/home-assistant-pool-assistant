@@ -352,6 +352,15 @@ Vorschlag:
 
 ## Handlungsempfehlungen nach Ursache
 
+Der Sensor `Handlungsempfehlung` fasst die wichtigsten Ursachen in eine
+priorisierte Aktionsliste zusammen. Messqualität blockiert dabei konkrete
+Dosierhinweise: Bei veralteten, unsynchronen oder unplausiblen Messwerten wird
+zuerst eine neue Messreihe empfohlen.
+
+Erst wenn die Messwerte plausibel sind, werden konkrete chemische Ursachen
+ausgegeben, z. B. zu wenig HOCl, erhöhter pH, hoher CYA, erhöhte Alkalinität
+oder erhöhtes gebundenes Chlor.
+
 ### HOCl zu niedrig
 
 - Neue Messung prüfen, wenn Werte alt oder unsynchron sind.
