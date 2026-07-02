@@ -34,6 +34,7 @@ def test_good_water_scores_high() -> None:
     assert result.algae_risk == "low"
     assert result.chemistry_index == 100
     assert result.load_status == "normal"
+    assert result.visual_status == "clear"
     assert result.pool_status == "Perfekt"
     assert result.recommendation_state == "Keine Maßnahme"
 
@@ -125,3 +126,61 @@ def test_limited_disinfection_and_elevated_bound_chlorine_recommend_observation(
     assert result.recommendation_state == "Beobachten"
     assert any("Aktives Chlor" in action for action in result.recommendations)
     assert any("Gebundenes Chlor" in action for action in result.recommendations)
+
+
+def test_cloudy_water_raises_pool_status_without_changing_chemistry_index() -> None:
+    result = assess_pool_water(
+        ph=7.3,
+        hocl_mg_l=0.07,
+        cya_mg_l=35,
+        alkalinity_mg_l=90,
+        bound_chlorine_mg_l=0.1,
+        chlorine_plausible=True,
+        measurement_status="current",
+        water_appearance="Milchig",
+    )
+
+    assert result.chemistry_index == 100
+    assert result.algae_risk == "low"
+    assert result.visual_status == "cloudy"
+    assert result.pool_status == "Handlungsbedarf"
+    assert result.recommendation_state == "Korrigieren"
+    assert any("milchig" in action for action in result.recommendations)
+
+
+def test_green_water_is_critical_context() -> None:
+    result = assess_pool_water(
+        ph=7.3,
+        hocl_mg_l=0.07,
+        cya_mg_l=35,
+        alkalinity_mg_l=90,
+        bound_chlorine_mg_l=0.1,
+        chlorine_plausible=True,
+        measurement_status="current",
+        water_appearance="Grün",
+    )
+
+    assert result.chemistry_index == 100
+    assert result.algae_risk == "low"
+    assert result.visual_status == "green"
+    assert result.pool_status == "Kritisch"
+    assert result.recommendation_state == "Kritisch"
+    assert any("grün" in action.lower() for action in result.recommendations)
+
+
+def test_critical_disinfection_recommends_ph_reduction_above_7_4() -> None:
+    result = assess_pool_water(
+        ph=7.56,
+        hocl_mg_l=0.0077,
+        cya_mg_l=73.3,
+        alkalinity_mg_l=200,
+        bound_chlorine_mg_l=0.01,
+        chlorine_plausible=True,
+        measurement_status="current",
+        water_appearance="Grün",
+    )
+
+    assert result.pool_status == "Kritisch"
+    assert result.recommendation_state == "Kritisch"
+    assert any("pH auf 7,1-7,2" in action for action in result.recommendations)
+    assert "pH auf 7,1-7,2" in result.recommendations[0]

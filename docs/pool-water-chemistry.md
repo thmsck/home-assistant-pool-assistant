@@ -361,6 +361,11 @@ Erst wenn die Messwerte plausibel sind, werden konkrete chemische Ursachen
 ausgegeben, z. B. zu wenig HOCl, erhöhter pH, hoher CYA, erhöhte Alkalinität
 oder erhöhtes gebundenes Chlor.
 
+Die manuelle `Wasseroptik` wird als Beobachtungskontext berücksichtigt. Sie
+ändert nicht den chemischen `Poolchemie-Index`, kann aber `Poolstatus` und
+`Handlungsempfehlung` verschärfen, z. B. bei milchigem, grünlichem oder grünem
+Wasser.
+
 ### HOCl zu niedrig
 
 - Neue Messung prüfen, wenn Werte alt oder unsynchron sind.

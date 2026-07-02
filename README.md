@@ -41,6 +41,7 @@ Recommendation: observe
 - Tracks measurement age and synchronization
 - Assesses chemical algae risk
 - Assesses bound chlorine load separately from algae risk
+- Adds a manual water appearance selector for visual observations
 - Calculates a project-specific pool chemistry index
 - Provides human-readable recommendations
 - Supports optional temperature input, otherwise falls back to `25 °C`
@@ -92,6 +93,8 @@ Pool Assistant is intentionally conservative:
 - It does not automatically dose chemicals.
 - It blocks recommendations when measurements are stale, unsynchronized or
   chemically implausible.
+- It treats visual water appearance as observation context, not as part of the
+  chemical model.
 - It treats the pool chemistry index as a project-specific score, not as a
   scientific health metric.
 
@@ -199,6 +202,11 @@ The integration creates a separate Pool Assistant device with these sensors:
 | `Poolchemie-Index` | Project-specific chemistry score from 0-100 % |
 | `Poolstatus` | Human-readable overall status |
 | `Handlungsempfehlung` | Recommended next action |
+
+The device also creates a `Wasseroptik` select entity. It can be set manually to
+values such as `Klar`, `Leicht trüb`, `Milchig`, `Grünlich`, `Grün` or
+`Braun/verschmutzt`. This visual observation can affect the pool status and
+recommendation, but it does not change the calculated chemistry index.
 
 ## Example Dashboard
 

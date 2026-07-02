@@ -14,6 +14,8 @@ class PoolAssessment:
     pool_status: str
     summary: str
     load_status: str
+    water_appearance: str
+    visual_status: str
     recommendation_state: str
     recommendation_summary: str
     recommendations: tuple[str, ...]
@@ -34,6 +36,7 @@ def assess_pool_water(
     bound_chlorine_mg_l: float | None,
     chlorine_plausible: bool | None,
     measurement_status: str | None,
+    water_appearance: str = "Klar",
 ) -> PoolAssessment:
     """Assess pool water quality from calculated chemistry and source quality."""
 
@@ -46,6 +49,7 @@ def assess_pool_water(
         measurement_status=measurement_status,
     )
     load_status = _load_status(bound_chlorine_mg_l, chlorine_plausible)
+    visual_status = _visual_status(water_appearance)
     ph_score = _ph_score(ph)
     disinfection_score = _disinfection_score(disinfection_state)
     cya_score = _cya_score(cya_mg_l)
@@ -81,6 +85,7 @@ def assess_pool_water(
         algae_risk=algae_risk,
         disinfection_state=disinfection_state,
         load_status=load_status,
+        visual_status=visual_status,
         chlorine_plausible=chlorine_plausible,
         measurement_status=measurement_status,
         cya_mg_l=cya_mg_l,
@@ -97,6 +102,8 @@ def assess_pool_water(
         disinfection_state=disinfection_state,
         algae_risk=algae_risk,
         load_status=load_status,
+        water_appearance=water_appearance,
+        visual_status=visual_status,
     )
 
     return PoolAssessment(
@@ -105,6 +112,8 @@ def assess_pool_water(
         pool_status=pool_status,
         summary=summary,
         load_status=load_status,
+        water_appearance=water_appearance,
+        visual_status=visual_status,
         recommendation_state=recommendation_state,
         recommendation_summary=recommendation_summary,
         recommendations=recommendations,
@@ -243,12 +252,29 @@ def _measurement_score(measurement_status: str | None) -> int:
     return 40
 
 
+def _visual_status(water_appearance: str) -> str:
+    if water_appearance == "Klar":
+        return "clear"
+    if water_appearance == "Leicht trüb":
+        return "slightly_cloudy"
+    if water_appearance == "Milchig":
+        return "cloudy"
+    if water_appearance == "Grünlich":
+        return "greenish"
+    if water_appearance == "Grün":
+        return "green"
+    if water_appearance == "Braun/verschmutzt":
+        return "dirty"
+    return "unknown"
+
+
 def _pool_status(
     *,
     chemistry_index: int,
     algae_risk: str,
     disinfection_state: str,
     load_status: str,
+    visual_status: str,
     chlorine_plausible: bool | None,
     measurement_status: str | None,
     cya_mg_l: float,
@@ -260,14 +286,20 @@ def _pool_status(
         return "Messwerte nicht synchron", "PoolLab-Messungen stammen nicht aus derselben Messreihe."
     if chlorine_plausible is False:
         return "Messwerte prüfen", "Gesamtchlor ist kleiner als freies Chlor. Messwerte oder Messzeitpunkte prüfen."
+    if visual_status == "green":
+        return "Kritisch", "Poolwasser ist sichtbar grün."
     if algae_risk == "critical" or chemistry_index < 50:
         return "Kritisch", "Algenrisiko oder Desinfektionsleistung ist kritisch."
+    if visual_status in {"cloudy", "greenish", "dirty"}:
+        return "Handlungsbedarf", "Poolwasser ist sichtbar auffällig."
     if load_status == "high":
         return "Handlungsbedarf", "Gebundenes Chlor ist deutlich erhöht."
     if algae_risk == "high" or chemistry_index < 70:
         return "Handlungsbedarf", "Poolwasser benötigt zeitnah Aufmerksamkeit."
     if load_status == "elevated":
         return "Beobachten", "Gebundenes Chlor ist erhöht."
+    if visual_status == "slightly_cloudy":
+        return "Beobachten", "Poolwasser ist leicht trüb."
     if algae_risk == "medium" or chemistry_index < 85:
         return "Beobachten", "Poolwasser ist nutzbar, sollte aber beobachtet werden."
     if disinfection_state == "limited":
@@ -293,6 +325,8 @@ def _recommendation(
     disinfection_state: str,
     algae_risk: str,
     load_status: str,
+    water_appearance: str,
+    visual_status: str,
 ) -> tuple[str, str, tuple[str, ...]]:
     if measurement_status == "stale":
         return (
@@ -325,19 +359,32 @@ def _recommendation(
     priority = 0
     actions: list[str] = []
 
+    if ph > 7.8:
+        priority = max(priority, 2)
+        actions.append("pH auf 7,1-7,2 senken.")
+    elif ph > 7.6:
+        priority = max(priority, 1)
+        actions.append("pH auf 7,1-7,2 senken.")
+    elif ph > 7.4 and disinfection_state in {"critical", "limited"}:
+        priority = max(priority, 2 if disinfection_state == "critical" else 1)
+        actions.append("pH auf 7,1-7,2 senken.")
+    elif ph < 7.0:
+        priority = max(priority, 2)
+        actions.append("pH ist niedrig; pH anheben und Messung bestätigen.")
+
     if disinfection_state == "critical":
         priority = max(priority, 3)
-        actions.append("Aktives Chlor ist zu niedrig; Desinfektionsleistung zeitnah erhöhen.")
+        actions.append("Aktives Chlor zeitnah erhöhen.")
     elif disinfection_state == "limited":
         priority = max(priority, 1)
-        actions.append("Aktives Chlor liegt im gelben Bereich; bei Sonne, Badebetrieb oder Trübung freies Chlor erhöhen.")
+        actions.append("Aktives Chlor beobachten oder erhöhen.")
 
     if algae_risk == "critical":
         priority = max(priority, 3)
-        actions.append("Chemisches Algenrisiko ist kritisch; Ursache vor Nutzung prüfen.")
+        actions.append("Algenrisiko ist kritisch; Pool vor Nutzung prüfen.")
     elif algae_risk == "high":
         priority = max(priority, 2)
-        actions.append("Chemisches Algenrisiko ist erhöht; HOCl, pH und CYA gezielt korrigieren.")
+        actions.append("Algenrisiko ist erhöht; pH, HOCl und CYA prüfen.")
     elif algae_risk == "medium":
         priority = max(priority, 1)
         actions.append("Chemisches Algenrisiko beobachten; Entwicklung nach Umwälzung oder Nachdosierung erneut prüfen.")
@@ -352,15 +399,24 @@ def _recommendation(
         priority = max(priority, 1)
         actions.append("Gebundenes Chlor ist leicht erhöht; weiter beobachten.")
 
-    if ph > 7.8:
+    if visual_status == "green":
+        priority = max(priority, 3)
+        actions.append("Grünes Wasser: bürsten, filtern und desinfizieren.")
+    elif visual_status == "greenish":
         priority = max(priority, 2)
-        actions.append("pH ist deutlich erhöht; pH senken, da die Chlorwirkung reduziert ist.")
-    elif ph > 7.6:
+        actions.append("Wasser ist grünlich; Algenentwicklung prüfen und Filterlaufzeit erhöhen.")
+    elif visual_status == "cloudy":
+        priority = max(priority, 2)
+        actions.append("Wasser ist milchig; Filtration, pH und Desinfektion prüfen.")
+    elif visual_status == "dirty":
+        priority = max(priority, 2)
+        actions.append("Wasser ist sichtbar verschmutzt; Schmutzeintrag entfernen und Filterbetrieb prüfen.")
+    elif visual_status == "slightly_cloudy":
         priority = max(priority, 1)
-        actions.append("pH ist erhöht; pH-Senkung prüfen.")
-    elif ph < 7.0:
-        priority = max(priority, 2)
-        actions.append("pH ist niedrig; pH anheben und Messung bestätigen.")
+        actions.append("Wasser ist leicht trüb; Entwicklung beobachten und nach Umwälzung erneut prüfen.")
+    elif visual_status == "unknown":
+        priority = max(priority, 1)
+        actions.append(f"Wasseroptik '{water_appearance}' ist unbekannt; Auswahl prüfen.")
 
     if cya_mg_l > 90:
         priority = max(priority, 2)

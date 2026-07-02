@@ -6,15 +6,18 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 
-from .const import DOMAIN
+from .const import DEFAULT_WATER_APPEARANCE, DOMAIN
 
-PLATFORMS: list[Platform] = [Platform.SENSOR]
+PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.SELECT]
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Pool Assistant from a config entry."""
 
-    hass.data.setdefault(DOMAIN, {})[entry.entry_id] = entry.data | entry.options
+    hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {
+        "config": entry.data | entry.options,
+        "water_appearance": DEFAULT_WATER_APPEARANCE,
+    }
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True

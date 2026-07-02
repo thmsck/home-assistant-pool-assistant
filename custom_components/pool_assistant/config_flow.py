@@ -50,16 +50,11 @@ class PoolAssistantConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     ) -> PoolAssistantOptionsFlow:
         """Create the options flow."""
 
-        return PoolAssistantOptionsFlow(config_entry)
+        return PoolAssistantOptionsFlow()
 
 
 class PoolAssistantOptionsFlow(config_entries.OptionsFlow):
     """Handle options for Pool Assistant."""
-
-    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
-        """Initialize options flow."""
-
-        self.config_entry = config_entry
 
     async def async_step_init(
         self,

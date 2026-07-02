@@ -12,6 +12,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_NAME, PERCENTAGE
 from homeassistant.core import Event, HomeAssistant, callback
 from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.event import async_track_state_change_event
 from homeassistant.helpers.template import TemplateError
@@ -30,6 +31,7 @@ from .const import (
     ATTR_SOURCE_PH,
     ATTR_SOURCE_TEMPERATURE,
     ATTR_SOURCE_TOTAL_CHLORINE,
+    ATTR_WATER_APPEARANCE,
     CONF_ALKALINITY_ENTITY,
     CONF_CYA_ENTITY,
     CONF_FREE_CHLORINE_ENTITY,
@@ -39,7 +41,9 @@ from .const import (
     CONF_TOTAL_CHLORINE_ENTITY,
     DEFAULT_POOL_VOLUME_M3,
     DEFAULT_TEMPERATURE_C,
+    DEFAULT_WATER_APPEARANCE,
     DOMAIN,
+    SIGNAL_APPEARANCE_UPDATED,
 )
 from .measurement import MeasurementStatus, calculate_measurement_status
 
@@ -57,6 +61,7 @@ class PoolAssistantResult:
     bound_chlorine_raw_delta_mg_l: float | None
     chlorine_plausible: bool | None
     measurement_status: MeasurementStatus | None
+    water_appearance: str
     assessment: PoolAssessment
 
 
@@ -257,6 +262,13 @@ class PoolAssistantSensor(SensorEntity):
                 self._async_source_changed,
             )
         )
+        self.async_on_remove(
+            async_dispatcher_connect(
+                self.hass,
+                f"{SIGNAL_APPEARANCE_UPDATED}_{self.entry.entry_id}",
+                self._async_appearance_changed,
+            )
+        )
         self._update_value()
 
     @property
@@ -288,6 +300,11 @@ class PoolAssistantSensor(SensorEntity):
         self.async_write_ha_state()
 
     @callback
+    def _async_appearance_changed(self) -> None:
+        self._update_value()
+        self.async_write_ha_state()
+
+    @callback
     def _update_value(self) -> None:
         result = self._calculate()
         if result is None:
@@ -307,6 +324,7 @@ class PoolAssistantSensor(SensorEntity):
                 CONF_POOL_VOLUME_M3,
                 DEFAULT_POOL_VOLUME_M3,
             ),
+            ATTR_WATER_APPEARANCE: result.water_appearance,
             ATTR_SOURCE_PH: config[CONF_PH_ENTITY],
             ATTR_SOURCE_FREE_CHLORINE: config[CONF_FREE_CHLORINE_ENTITY],
             ATTR_SOURCE_CYA: config[CONF_CYA_ENTITY],
@@ -353,6 +371,7 @@ class PoolAssistantSensor(SensorEntity):
             if alkalinity_entity:
                 alkalinity = _state_float(self.hass, alkalinity_entity)
             measurement_status = _measurement_status(self.hass, config)
+            water_appearance = _water_appearance(self.hass, self.entry)
 
             return PoolAssistantResult(
                 chemistry=chemistry,
@@ -360,6 +379,7 @@ class PoolAssistantSensor(SensorEntity):
                 bound_chlorine_raw_delta_mg_l=raw_delta,
                 chlorine_plausible=chlorine_plausible,
                 measurement_status=measurement_status,
+                water_appearance=water_appearance,
                 assessment=assess_pool_water(
                     ph=ph,
                     hocl_mg_l=chemistry.hocl_mg_l,
@@ -372,6 +392,7 @@ class PoolAssistantSensor(SensorEntity):
                         if measurement_status is not None
                         else None
                     ),
+                    water_appearance=water_appearance,
                 ),
             )
         except (TypeError, ValueError):
@@ -383,6 +404,11 @@ def _state_float(hass: HomeAssistant, entity_id: str) -> float:
     if state is None or state.state in {"unknown", "unavailable", ""}:
         raise ValueError(f"Source entity {entity_id} has no usable state")
     return float(state.state)
+
+
+def _water_appearance(hass: HomeAssistant, entry: ConfigEntry) -> str:
+    entry_data = hass.data.get(DOMAIN, {}).get(entry.entry_id, {})
+    return entry_data.get("water_appearance", DEFAULT_WATER_APPEARANCE)
 
 
 def _measurement_status(
@@ -495,6 +521,8 @@ def _assessment_attributes(assessment: PoolAssessment) -> dict[str, Any]:
         "cya_score": assessment.cya_score,
         "measurement_score": assessment.measurement_score,
         "load_status": assessment.load_status,
+        "water_appearance": assessment.water_appearance,
+        "visual_status": assessment.visual_status,
     }
     if assessment.alkalinity_score is not None:
         attributes["alkalinity_score"] = assessment.alkalinity_score
